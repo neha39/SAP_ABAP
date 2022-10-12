@@ -1,0 +1,68 @@
+REPORT ztest_report.
+
+CLASS utilities DEFINITION FINAL.
+
+  PUBLIC SECTION.
+    TYPES:
+      BEGIN OF type_dl_structure,
+        dl TYPE so_obj_nam,
+      END OF type_dl_structure,
+
+      BEGIN OF type_dl_and_email_structure,
+        dl    TYPE so_obj_nam,
+        email TYPE ad_namtext,
+      END OF type_dl_and_email_structure,
+
+      type_select_option      TYPE STANDARD TABLE OF selopt WITH DEFAULT KEY,
+      type_dl_table           TYPE STANDARD TABLE OF type_dl_structure WITH DEFAULT KEY,
+      type_dl_and_email_table TYPE STANDARD TABLE OF type_dl_and_email_structure WITH DEFAULT KEY.
+
+    CLASS-METHODS:
+      fetch_emails_from_dl IMPORTING dl_table                  TYPE type_dl_table
+                           RETURNING VALUE(dl_and_email_table) TYPE type_dl_and_email_table.
+
+  PRIVATE SECTION.
+    CONSTANTS:
+      co_i  TYPE char1 VALUE 'I',
+      co_eq TYPE char2 VALUE 'EQ'.
+
+ENDCLASS.
+
+CLASS utilities IMPLEMENTATION.
+
+  METHOD fetch_emails_from_dl.
+
+    IF lines( dl_table ) > 0.
+
+      DATA(range_table_for_dl) = VALUE type_select_option( FOR dl_structure IN dl_table
+                                                           ( sign   = co_i
+                                                             option = co_eq
+                                                             low    = dl_structure ) ).
+
+      SELECT
+        a~objnam AS dl_name,
+        c~name_text AS email
+        FROM soid AS a
+        INNER JOIN sodm AS b
+          ON  b~dlitp = a~dlitp
+          AND b~dliyr = a~dliyr
+          AND b~dlino = a~dlino
+        INNER JOIN v_adcp_so AS c
+          ON  c~so_key = substring( b~memno, 3, 10 )
+        WHERE a~objnam IN @range_table_for_dl
+        INTO TABLE @DATA(dl_and_email_temp_table).
+
+      IF sy-subrc = 0.
+        dl_and_email_table = dl_and_email_temp_table.
+      ENDIF.
+
+    ENDIF.
+
+  ENDMETHOD.
+
+ENDCLASS.
+
+START-OF-SELECTION.
+
+  DATA(table_with_dl)           = VALUE utilities=>type_dl_table( ( dl = 'BRF+ ASN_CS' ) ( dl = 'BRF+ ASN_LO' ) ).
+  DATA(table_with_dl_and_email) = utilities=>fetch_emails_from_dl( dl_table = table_with_dl ).
