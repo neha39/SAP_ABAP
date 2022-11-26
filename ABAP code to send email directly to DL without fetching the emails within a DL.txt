@@ -1,0 +1,103 @@
+REPORT zrsd_test_1.
+
+CLASS class_send_email DEFINITION FINAL.
+
+  PUBLIC SECTION.
+
+    CLASS-METHODS:
+      send_email IMPORTING email_receiver_dl TYPE so_obj_nam
+                           email_subject     TYPE char50
+                           email_body        TYPE bcsy_text
+                           email_sender      TYPE ad_smtpadr
+                 RAISING   zcx_data_not_found.
+
+  PRIVATE SECTION.
+
+ENDCLASS.
+
+CLASS class_send_email IMPLEMENTATION.
+
+  METHOD send_email.
+
+    TRY.
+*       Create send request
+        DATA(object_send_request) = cl_bcs=>create_persistent( ).
+
+*       Create subject and body for email
+        DATA(object_document) = cl_document_bcs=>create_document( i_type    = 'RAW'
+                                                                  i_text    = email_body
+                                                                  i_subject = email_subject ).
+*       Add subject and body to email
+        object_send_request->set_document( object_document ).
+
+*       Create recipient object using DL
+        DATA(object_recipient) = cl_distributionlist_bcs=>getu_persistent( i_dliname = email_receiver_dl
+                                                                           i_private = space ).
+
+*       Add recipient object to send request
+        object_send_request->add_recipient( object_recipient ).
+
+*       Create email sender
+        DATA(object_sender) = cl_cam_address_bcs=>create_internet_address( i_address_string = email_sender ).
+
+*       Set email sender to send request
+        object_send_request->set_sender( i_sender = object_sender ).
+
+*       Send email
+        DATA(ltp_sent_to_all) = object_send_request->send( i_with_error_screen = abap_true ).
+
+*       If email successfully sent commit work
+        IF ltp_sent_to_all = abap_true.
+          COMMIT WORK.
+        ENDIF.
+
+      CATCH cx_bcs.
+
+*       Raise exception is email not sent
+        RAISE EXCEPTION TYPE zcx_data_not_found.
+
+    ENDTRY.
+
+  ENDMETHOD.
+
+ENDCLASS.
+
+START-OF-SELECTION.
+
+* Declare data for email set-up
+  DATA:
+    email_receiver_dl TYPE so_obj_nam,
+    email_subject     TYPE char50,
+    email_body        TYPE bcsy_text,
+    email_sender      TYPE ad_smtpadr.
+
+* Set values for th email variables
+  email_receiver_dl = 'DL NAME'.
+  email_subject     = '<TEST EMAIL>'.
+  email_body        = VALUE #( (  Line = 'Dear Business User,' )
+                               (  Line = '' )
+                               (  Line = 'Please be informed about XXXXXXXXXX' )
+                               (  Line = '' )
+                               (  Line = 'Regards,' )
+                               (  Line = 'XYZ' ) ).
+  email_sender      = 'sender@XYZ.com'.
+
+* Call class method to send email
+  TRY.
+      class_send_email=>send_email(
+        EXPORTING
+          email_receiver_dl = email_receiver_dl
+          email_subject     = email_subject
+          email_body        = email_body
+          email_sender      = email_sender
+      ).
+
+*     Display success message when email is sent
+      MESSAGE 'Email sent successfully!' TYPE 'W' DISPLAY LIKE 'S'.
+
+*   Catch exception is email is not send and display message
+    CATCH zcx_data_not_found. " Exception
+
+      MESSAGE 'Error occured while sending email!' TYPE 'W' DISPLAY LIKE 'E'.
+
+  ENDTRY.
